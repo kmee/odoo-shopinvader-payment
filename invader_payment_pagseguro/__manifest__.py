@@ -8,7 +8,7 @@
     "website": "https://github.com/shopinvader/odoo-shopinvader-payment",
     "author": "KMEE INFORMATICA LTDA",
     "license": "AGPL-3",
-    "external_dependencies": {},
+    "external_dependencies": {"python": ["cerberus"]},
     "depends": ["invader_payment", "payment_pagseguro", "base_rest"],
     "demo": [],
 }
