@@ -42,8 +42,7 @@ class PaymentServicePagseguro(AbstractComponent):
             self.env["ir.config_parameter"].sudo().get_param("web.base.url")
         )
         res = requests.get(
-            "http://" + base_url + ":8069/payment/pagseguro/public_key",
-            json=payload,
+            base_url + "/payment/pagseguro/public_key", json=payload
         )
 
         content = json.loads(res.content)
