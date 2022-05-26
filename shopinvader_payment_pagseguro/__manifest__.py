@@ -10,6 +10,6 @@
     "license": "AGPL-3",
     "category": "e-commerce",
     "depends": ["shopinvader_payment", "invader_payment_pagseguro"],
-    "demo": [],
+    "demo": ["demo/payment_demo.xml"],
     "autoinstall": True,
 }

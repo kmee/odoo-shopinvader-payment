@@ -5,7 +5,7 @@ import json
 import logging
 
 import requests
-from odoo.addons.base_rest.components.service import to_int
+
 from odoo.addons.base_rest import restapi
 from odoo.addons.component.core import AbstractComponent
 
@@ -30,64 +30,29 @@ class PaymentServicePagseguro(AbstractComponent):
         ),
     )
     def confirm_payment(self, target, **params):
-        """ Create charge from sale order"""
-        sale_order_id = params.get("sale_order_id")
-        partner_id = params.get("partner_id")
-        cc_holder_name = params.get("cc_holder_name")
-        cc_token = params.get("cc_token")
+        """ Create charge from payable sale order"""
+        card = params.get("card")
+
         payable = self.payment_service._invader_find_payable_from_target(
             target, **params
         )
-
-        acquirer_id = self.env.ref(
-            "payment_pagseguro.payment_acquirer_pagseguro"
-        ).id
-        sale_order = self.env['sale.order'].browse(sale_order_id)
-
-        payload = {
-            "jsonrpc": "2.0",
-            "params": {
-                "acquirer_id": acquirer_id,
-                "partner_id": partner_id,
-                "cc_holder_name": cc_holder_name,
-                "cc_token": cc_token,
-            }
-        }
-        _logger.info("Sending payload: %s" % payload)
-
-        base_url = (
-            self.env["ir.config_parameter"].sudo().get_param("web.base.url")
-        )
-        res = requests.get(
-            base_url + "/pagseguro_s2s_create_json_3ds", json=payload
+        self.payment_service._check_provider(
+            payable.payment_mode_id, "pagseguro"
         )
 
-        return {
-            "res": str(sale_order_id),
-            "result": True
-        }
+        return {"res": payable.name + "" + card.get("name"), "result": True}
 
     def _get_schema_confirm_payment(self):
         res = self.payment_service._invader_get_target_validator()
         res.update(
             {
-                "sale_order_id": {
-                    "coerce": to_int,
-                    "type": "integer",
+                "card": {
+                    "type": "dict",
                     "required": True,
-                },
-                "partner_id": {
-                    "coerce": to_int,
-                    "type": "integer",
-                    "required": False,
-                },
-                "cc_holder_name": {
-                    "type": "string",
-                    "required": True,
-                },
-                "cc_token": {
-                    "type": "string",
-                    "required": True,
+                    "schema": {
+                        "name": {"type": "string", "required": True},
+                        "token": {"type": "string", "required": True},
+                    },
                 }
             }
         )
