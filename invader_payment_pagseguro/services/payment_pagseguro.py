@@ -40,7 +40,39 @@ class PaymentServicePagseguro(AbstractComponent):
             payable.payment_mode_id, "pagseguro"
         )
 
-        return {"res": payable.name + "" + card.get("name"), "result": True}
+        token = self._get_token(card, payable)
+        transaction = self._pagseguro_prepare_payment_transaction_data(
+            payable, token
+        )
+        transaction.pagseguro_s2s_do_transaction()
+
+        return {
+            "res": str(transaction.id),
+            "result": True,
+        }
+
+    def _pagseguro_prepare_payment_transaction_data(self, payable, token):
+        transaction_data = payable._invader_prepare_payment_transaction_data(
+            payable.payment_mode_id
+        )
+        transaction_data["payment_token_id"] = token.id
+
+        return self.env["payment.transaction"].create(transaction_data)
+
+    def _get_token(self, card, payable):
+        acquirer = payable.payment_mode_id.payment_acquirer_id
+        partner = payable.partner_id
+
+        data = {
+            "acquirer_id": acquirer.id,
+            "partner_id": partner.id,
+            "cc_holder_name": card.get("name"),
+            "cc_token": card.get("token"),
+            "payment_method": card.get("payment_method"),
+            "installments": card.get("installments"),
+        }
+
+        return acquirer.pagseguro_s2s_form_process(data)
 
     def _get_schema_confirm_payment(self):
         res = self.payment_service._invader_get_target_validator()
@@ -52,6 +84,16 @@ class PaymentServicePagseguro(AbstractComponent):
                     "schema": {
                         "name": {"type": "string", "required": True},
                         "token": {"type": "string", "required": True},
+                        "payment_method": {
+                            "type": "string",
+                            "required": True,
+                            "allowed": ["CREDIT_CARD"],
+                        },
+                        "installments": {
+                            "type": "integer",
+                            "coerce": int,
+                            "required": True,
+                        },
                     },
                 }
             }
