@@ -45,9 +45,10 @@ class PaymentServicePagseguro(AbstractComponent):
             payable, token
         )
         transaction.pagseguro_s2s_do_transaction()
+        transaction.pagseguro_s2s_capture_transaction()
 
         return {
-            "res": str(transaction.id),
+            "transaction_status": transaction.state,
             "result": True,
         }
 
