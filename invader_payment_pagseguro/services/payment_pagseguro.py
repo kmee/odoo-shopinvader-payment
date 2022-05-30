@@ -104,7 +104,7 @@ class PaymentServicePagseguro(AbstractComponent):
     def _get_schema_return_confirm_payment(self):
         return {
             "result": {"type": "boolean", "required": True},
-            "res": {"type": "string", "required": True},
+            "transaction_status": {"type": "string", "required": True},
         }
 
     @restapi.method(
