@@ -164,3 +164,77 @@ class PaymentServicePagseguro(AbstractComponent):
             "success": {"type": "boolean", "required": True},
             "error": {"type": "string", "required": False},
         }
+
+    @restapi.method(
+        [(["/confirm-payment-pix"], "POST")],
+        input_param=restapi.CerberusValidator("_get_schema_confirm_payment_pix"),
+        output_param=restapi.CerberusValidator(
+            "_get_schema_return_confirm_payment_pix"
+        ),
+    )
+    def confirm_payment_pix(self, target, **params):
+        # Get body params
+        txid = params.get("txid")
+
+        # Get cart
+        payable = self.payment_service._invader_find_payable_from_target(
+            target, **params
+        )
+
+        # Validate acquirer
+        self.payment_service._check_provider(
+            payable.payment_mode_id, "pagseguro"
+        )
+
+        token = self._get_token_pix(payable, txid)
+        transaction = self._pagseguro_prepare_payment_transaction_data(
+            payable, token
+        )
+
+        # Create charge
+        res = transaction.pagseguro_pix_do_transaction()
+
+        if res.get('result'):
+            return {
+                "result": True,
+                "location": res.get("location")
+            }
+        else:
+            return {
+                "result": False,
+                "error": res.get("error_message")
+            }
+
+    def _get_token_pix(self, payable, tx_id):
+        acquirer = payable.payment_mode_id.payment_acquirer_id
+        partner = payable.partner_id
+
+        payment_token = (
+            self.env["payment.token"]
+            .sudo()
+            .create(
+                {
+                    "acquirer_ref": partner.id,
+                    "acquirer_id":  acquirer.id,
+                    "partner_id": partner.id,
+                    "tx_id": tx_id
+                }
+            )
+        )
+
+        return payment_token
+
+    def _get_schema_confirm_payment_pix(self):
+        res = self.payment_service._invader_get_target_validator()
+        res.update({
+            "txtid": {"type": "string", "required": True}
+        }
+        )
+        return res
+
+    def _get_schema_return_confirm_payment_pix(self):
+        return {
+            "result": {"type": "boolean", "required": True},
+            "location": {"type": "string", "required": False},
+            "error": {"type": "string", "required": False},
+        }
