@@ -223,7 +223,7 @@ class PaymentServicePagseguro(AbstractComponent):
 
     def _get_schema_confirm_payment_pix(self):
         res = self.payment_service._invader_get_target_validator()
-        res.update({"tx_id": {"type": "string", "required": False}})
+        res.update({"tx_id": {"type": "string", "required": True}})
         return res
 
     def _get_schema_return_confirm_payment_pix(self):
