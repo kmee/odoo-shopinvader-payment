@@ -6,6 +6,8 @@ import logging
 
 import requests
 
+from odoo.exceptions import UserError, ValidationError
+
 from odoo.addons.base_rest import restapi
 from odoo.addons.component.core import AbstractComponent
 
@@ -167,14 +169,16 @@ class PaymentServicePagseguro(AbstractComponent):
 
     @restapi.method(
         [(["/confirm-payment-pix"], "POST")],
-        input_param=restapi.CerberusValidator("_get_schema_confirm_payment_pix"),
+        input_param=restapi.CerberusValidator(
+            "_get_schema_confirm_payment_pix"
+        ),
         output_param=restapi.CerberusValidator(
             "_get_schema_return_confirm_payment_pix"
         ),
     )
     def confirm_payment_pix(self, target, **params):
         # Get body params
-        txid = params.get("txid")
+        tx_id = params.get("tx_id")
 
         # Get cart
         payable = self.payment_service._invader_find_payable_from_target(
@@ -186,24 +190,17 @@ class PaymentServicePagseguro(AbstractComponent):
             payable.payment_mode_id, "pagseguro"
         )
 
-        token = self._get_token_pix(payable, txid)
+        token = self._get_token_pix(payable, tx_id)
         transaction = self._pagseguro_prepare_payment_transaction_data(
             payable, token
         )
 
-        # Create charge
-        res = transaction.pagseguro_pix_do_transaction()
+        try:
+            res = transaction.pagseguro_pix_do_transaction()
+        except (UserError, ValidationError) as e:
+            return {"result": False, "error": str(e)}
 
-        if res.get('result'):
-            return {
-                "result": True,
-                "location": res.get("location")
-            }
-        else:
-            return {
-                "result": False,
-                "error": res.get("error_message")
-            }
+        return res
 
     def _get_token_pix(self, payable, tx_id):
         acquirer = payable.payment_mode_id.payment_acquirer_id
@@ -215,9 +212,9 @@ class PaymentServicePagseguro(AbstractComponent):
             .create(
                 {
                     "acquirer_ref": partner.id,
-                    "acquirer_id":  acquirer.id,
+                    "acquirer_id": acquirer.id,
                     "partner_id": partner.id,
-                    "tx_id": tx_id
+                    "pagseguro_tx_id": tx_id,
                 }
             )
         )
@@ -226,10 +223,7 @@ class PaymentServicePagseguro(AbstractComponent):
 
     def _get_schema_confirm_payment_pix(self):
         res = self.payment_service._invader_get_target_validator()
-        res.update({
-            "txtid": {"type": "string", "required": True}
-        }
-        )
+        res.update({"tx_id": {"type": "string", "required": False}})
         return res
 
     def _get_schema_return_confirm_payment_pix(self):
