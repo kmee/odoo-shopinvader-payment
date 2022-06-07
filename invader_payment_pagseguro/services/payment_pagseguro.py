@@ -232,3 +232,63 @@ class PaymentServicePagseguro(AbstractComponent):
             "location": {"type": "string", "required": False},
             "error": {"type": "string", "required": False},
         }
+
+    @restapi.method(
+        [(["/search-payment-pix"], "GET")],
+        input_param=restapi.CerberusValidator("_get_schema_search_pix"),
+        output_param=restapi.CerberusValidator(
+            "_get_schema_return_search_pix"
+        ),
+    )
+    def search_payment_pix(self, **params):
+        """Query the payment status of the pix collection"""
+        # Get body params
+        tx_id = params.get("tx_id") + "?"
+        revisao = params.get("revisao")
+        acquirer = self.env["payment.acquirer"]
+
+        r = self.env["payment.transaction"].pagseguro_search_payment_pix(tx_id,revisao)
+        # # cert = acquirer.get_cert()
+        # # auth_token = acquirer.pagseguro_pix_acces_token
+        # auth_token = "39099b07-f13d-4f7f-a7d2-8054de1256a99565542441c3ba568c180f3b5fe73a0c1116-5f1b-4a44-9fb6-6eec63aaab3a"
+        # crt = "/home/cristiano/Projects/isla_docker/odoo/odoo/external-src/odoo-shopinvader-payment/invader_payment_pagseguro/kmee-sandbox.pem"
+        # key = "/home/cristiano/Projects/isla_docker/odoo/odoo/external-src/odoo-shopinvader-payment/invader_payment_pagseguro/kmee-sandbox.key"
+        # base_url = (
+        #     self.env["ir.config_parameter"].sudo().get_param("web.base.url")
+        # )
+        # _logger.error('base URL >>> ' + base_url)
+        # url = 'https://secure.sandbox.api.pagseguro.com'
+        #
+        # header = {
+        #     "Authorization": "Bearer " + auth_token,
+        #     "Content-Type": "application/json",
+        # }
+        # r = requests.get(
+        #     "https://secure.sandbox.api.pagseguro.com/instant-payments/cob/" + tx_id + revisao, headers=header,
+        #     cert=(crt, key),
+        # )
+        res = r.json()
+        print(res.text)
+        return {
+            "public_key": "ATIVEI",  # res.get("status"),
+            "success": False,
+            "error": "Unknown error",
+        }
+
+    def _get_schema_search_pix(self):
+        """ Get default api key and user email validator """
+        return {
+            "tx_id": {"type": "string", "required": True},
+            "revisao": {"type": "string", "required": True},
+        }
+
+    def _get_schema_return_search_pix(self):
+        """
+        Return validator of checkout_url service
+        checkout_url (str): Redirect checkout url
+        """
+        return {
+            "status": {"type": "string", "required": True},
+            # "success": {"type": "boolean", "required": True},
+            # "error": {"type": "string", "required": False},
+        }
