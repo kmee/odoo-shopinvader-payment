@@ -24,6 +24,17 @@ class PaymentServicePagseguro(AbstractComponent):
     def payment_service(self):
         return self.component(usage="invader.payment")
 
+    def _get_payable(self, target, params):
+        """ Get payable from cart and validate if acquirer is Pagseguro """
+        payable = self.payment_service._invader_find_payable_from_target(
+            target, **params
+        )
+        self.payment_service._check_provider(
+            payable.payment_mode_id, "pagseguro"
+        )
+
+        return payable
+
     @restapi.method(
         [(["/confirm-payment"], "POST")],
         input_param=restapi.CerberusValidator("_get_schema_confirm_payment"),
@@ -35,12 +46,7 @@ class PaymentServicePagseguro(AbstractComponent):
         """ Create charge from payable sale order"""
         card = params.get("card")
 
-        payable = self.payment_service._invader_find_payable_from_target(
-            target, **params
-        )
-        self.payment_service._check_provider(
-            payable.payment_mode_id, "pagseguro"
-        )
+        payable = self._get_payable(target, params)
 
         token = self._get_token(card, payable)
         transaction = self._pagseguro_prepare_payment_transaction_data(
@@ -71,7 +77,7 @@ class PaymentServicePagseguro(AbstractComponent):
             "partner_id": partner.id,
             "cc_holder_name": card.get("name"),
             "cc_token": card.get("token"),
-            "payment_method": card.get("payment_method"),
+            "payment_method": "CREDIT_CARD",
             "installments": card.get("installments"),
         }
 
@@ -87,11 +93,6 @@ class PaymentServicePagseguro(AbstractComponent):
                     "schema": {
                         "name": {"type": "string", "required": True},
                         "token": {"type": "string", "required": True},
-                        "payment_method": {
-                            "type": "string",
-                            "required": True,
-                            "allowed": ["CREDIT_CARD"],
-                        },
                         "installments": {
                             "type": "integer",
                             "coerce": int,
@@ -180,17 +181,10 @@ class PaymentServicePagseguro(AbstractComponent):
         # Get body params
         tx_id = params.get("tx_id")
 
-        # Get cart
-        payable = self.payment_service._invader_find_payable_from_target(
-            target, **params
-        )
-
-        # Validate acquirer
-        self.payment_service._check_provider(
-            payable.payment_mode_id, "pagseguro"
-        )
+        payable = self._get_payable(target, params)
 
         token = self._get_token_pix(payable, tx_id)
+
         transaction = self._pagseguro_prepare_payment_transaction_data(
             payable, token
         )
@@ -245,14 +239,12 @@ class PaymentServicePagseguro(AbstractComponent):
         # Get body params
         tx_id = params.get("tx_id") + "?"
         revisao = params.get("revisao")
-        acquirer = self.env["payment.acquirer"]
 
-        r = self.env["payment.transaction"].pagseguro_search_payment_pix(tx_id,revisao)
+        r = self.env["payment.transaction"].pagseguro_search_payment_pix(
+            tx_id, revisao
+        )
         # # cert = acquirer.get_cert()
         # # auth_token = acquirer.pagseguro_pix_acces_token
-        # auth_token = "39099b07-f13d-4f7f-a7d2-8054de1256a99565542441c3ba568c180f3b5fe73a0c1116-5f1b-4a44-9fb6-6eec63aaab3a"
-        # crt = "/home/cristiano/Projects/isla_docker/odoo/odoo/external-src/odoo-shopinvader-payment/invader_payment_pagseguro/kmee-sandbox.pem"
-        # key = "/home/cristiano/Projects/isla_docker/odoo/odoo/external-src/odoo-shopinvader-payment/invader_payment_pagseguro/kmee-sandbox.key"
         # base_url = (
         #     self.env["ir.config_parameter"].sudo().get_param("web.base.url")
         # )
@@ -263,12 +255,9 @@ class PaymentServicePagseguro(AbstractComponent):
         #     "Authorization": "Bearer " + auth_token,
         #     "Content-Type": "application/json",
         # }
-        # r = requests.get(
-        #     "https://secure.sandbox.api.pagseguro.com/instant-payments/cob/" + tx_id + revisao, headers=header,
-        #     cert=(crt, key),
-        # )
+
         res = r.json()
-        print(res.text)
+        _logger.info(res)
         return {
             "public_key": "ATIVEI",  # res.get("status"),
             "success": False,
@@ -291,4 +280,62 @@ class PaymentServicePagseguro(AbstractComponent):
             "status": {"type": "string", "required": True},
             # "success": {"type": "boolean", "required": True},
             # "error": {"type": "string", "required": False},
+        }
+
+    @restapi.method(
+        [(["/confirm-payment-boleto"], "POST")],
+        input_param=restapi.CerberusValidator(
+            "_get_schema_confirm_payment_boleto"
+        ),
+        output_param=restapi.CerberusValidator(
+            "_get_schema_return_confirm_payment_boleto"
+        ),
+    )
+    def confirm_payment_boleto(self, target, **params):
+        """ Confirm payment with Boleto.
+
+        Creates a pagseguro charge and change the sale order status to authorized.
+        Returns result True when Pagseguro's charge is created successfully.
+        """
+        payable = self._get_payable(target, params)
+
+        token = self._get_token_boleto(payable)
+
+        transaction = self._pagseguro_prepare_payment_transaction_data(
+            payable, token
+        )
+
+        try:
+            res = transaction.pagseguro_boleto_do_transaction()
+        except Exception as e:
+            return {"res": {"error": str(e)}}
+
+        return {"res": res}
+
+    def _get_token_boleto(self, payable):
+        acquirer = payable.payment_mode_id.payment_acquirer_id
+        partner = payable.partner_id
+
+        payment_token = (
+            self.env["payment.token"]
+            .sudo()
+            .create(
+                {
+                    "acquirer_ref": partner.id,
+                    "acquirer_id": acquirer.id,
+                    "partner_id": partner.id,
+                    "pagseguro_payment_method": "BOLETO",
+                }
+            )
+        )
+
+        return payment_token
+
+    def _get_schema_confirm_payment_boleto(self):
+        return self.payment_service._invader_get_target_validator()
+
+    @staticmethod
+    def _get_schema_return_confirm_payment_boleto():
+        return {
+            "res": {"type": "dict", "allow_unknown": True, "required": False}
         }
