@@ -53,7 +53,6 @@ class PaymentServicePagseguro(AbstractComponent):
             payable, token
         )
         transaction.pagseguro_s2s_do_transaction()
-        transaction.pagseguro_s2s_capture_transaction()
 
         return {
             "transaction_status": transaction.state,
@@ -79,6 +78,7 @@ class PaymentServicePagseguro(AbstractComponent):
             "cc_token": card.get("token"),
             "payment_method": "CREDIT_CARD",
             "installments": card.get("installments"),
+            "capture": True,
         }
 
         return acquirer.pagseguro_s2s_form_process(data)
