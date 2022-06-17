@@ -56,7 +56,6 @@ class PaymentServicePagseguro(AbstractComponent):
 
         return {
             "transaction_status": transaction.state,
-            "result": True,
         }
 
     def _pagseguro_prepare_payment_transaction_data(self, payable, token):
@@ -105,7 +104,6 @@ class PaymentServicePagseguro(AbstractComponent):
 
     def _get_schema_return_confirm_payment(self):
         return {
-            "result": {"type": "boolean", "required": True},
             "transaction_status": {"type": "string", "required": True},
         }
 
