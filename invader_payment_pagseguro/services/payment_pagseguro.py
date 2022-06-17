@@ -36,19 +36,21 @@ class PaymentServicePagseguro(AbstractComponent):
         return payable
 
     @restapi.method(
-        [(["/confirm-payment"], "POST")],
-        input_param=restapi.CerberusValidator("_get_schema_confirm_payment"),
+        [(["/confirm-payment-credit"], "POST")],
+        input_param=restapi.CerberusValidator(
+            "get_schema_confirm_payment_credit"
+        ),
         output_param=restapi.CerberusValidator(
-            "_get_schema_return_confirm_payment"
+            "_get_schema_return_confirm_payment_credit"
         ),
     )
-    def confirm_payment(self, target, **params):
+    def confirm_payment_credit(self, target, **params):
         """ Create charge from payable sale order"""
         card = params.get("card")
 
         payable = self._get_payable(target, params)
 
-        token = self._get_token(card, payable)
+        token = self._get_token_credit(card, payable)
         transaction = self._pagseguro_prepare_payment_transaction_data(
             payable, token
         )
@@ -66,7 +68,8 @@ class PaymentServicePagseguro(AbstractComponent):
 
         return self.env["payment.transaction"].create(transaction_data)
 
-    def _get_token(self, card, payable):
+    @staticmethod
+    def _get_token_credit(card, payable):
         acquirer = payable.payment_mode_id.payment_acquirer_id
         partner = payable.partner_id
 
@@ -81,7 +84,7 @@ class PaymentServicePagseguro(AbstractComponent):
 
         return acquirer.pagseguro_s2s_form_process(data)
 
-    def _get_schema_confirm_payment(self):
+    def get_schema_confirm_payment_credit(self):
         res = self.payment_service._invader_get_target_validator()
         res.update(
             {
@@ -102,7 +105,7 @@ class PaymentServicePagseguro(AbstractComponent):
         )
         return res
 
-    def _get_schema_return_confirm_payment(self):
+    def _get_schema_return_confirm_payment_credit(self):
         return {
             "transaction_status": {"type": "string", "required": True},
         }
