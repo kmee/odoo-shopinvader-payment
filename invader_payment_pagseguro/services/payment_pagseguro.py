@@ -78,7 +78,6 @@ class PaymentServicePagseguro(AbstractComponent):
             "cc_token": card.get("token"),
             "payment_method": "CREDIT_CARD",
             "installments": card.get("installments"),
-            "capture": True,
         }
 
         return acquirer.pagseguro_s2s_form_process(data)
