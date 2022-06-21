@@ -209,6 +209,7 @@ class PaymentServicePagseguro(AbstractComponent):
                     "acquirer_id": acquirer.id,
                     "partner_id": partner.id,
                     "pagseguro_tx_id": tx_id,
+                    "pagseguro_payment_method": "PIX",
                 }
             )
         )
