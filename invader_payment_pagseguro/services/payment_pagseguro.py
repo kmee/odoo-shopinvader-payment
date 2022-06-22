@@ -29,8 +29,9 @@ class PaymentServicePagseguro(AbstractComponent):
         payable = self.payment_service._invader_find_payable_from_target(
             target, **params
         )
-        self.payment_service._check_provider(
-            payable.payment_mode_id, "pagseguro"
+        # Set Pagseguro as payment mode to avoid inconsistency
+        payable.payment_mode_id = self.env.ref(
+            "payment_pagseguro.payment_mode_pagseguro"
         )
 
         return payable
