@@ -25,16 +25,29 @@ class PaymentServicePagseguro(AbstractComponent):
         return self.component(usage="invader.payment")
 
     def _get_payable(self, target, params):
-        """ Get payable from cart and validate if acquirer is Pagseguro """
-        payable = self.payment_service._invader_find_payable_from_target(
+        """ Get payable from current cart """
+        return self.payment_service._invader_find_payable_from_target(
             target, **params
         )
-        # Set Pagseguro as payment mode to avoid inconsistency
-        payable.payment_mode_id = self.env.ref(
-            "payment_pagseguro.payment_mode_pagseguro"
-        )
 
-        return payable
+    def _get_payment_mode(self, params):
+        """ Returns payment mode from id.
+         Checks if payment mode has Pagseguro acquirer.
+         """
+        payment_mode_id = params.get("payment_mode_id")
+        payment_mode = self.env["account.payment.mode"].browse(payment_mode_id)
+        self.payment_service._check_provider(payment_mode, "pagseguro")
+
+        return payment_mode
+
+    def _create_transaction(self, payable, token, payment_mode_id):
+        """ Creates and returns a transaction based on parameters. """
+        transaction_data = payable._invader_prepare_payment_transaction_data(
+            payment_mode_id
+        )
+        transaction_data["payment_token_id"] = token.id
+
+        return self.env["payment.transaction"].create(transaction_data)
 
     @restapi.method(
         [(["/confirm-payment-credit"], "POST")],
@@ -48,68 +61,79 @@ class PaymentServicePagseguro(AbstractComponent):
     def confirm_payment_credit(self, target, **params):
         """ Create charge from payable sale order"""
         card = params.get("card")
-
+        payment_mode = self._get_payment_mode(params)
         payable = self._get_payable(target, params)
 
-        token = self._get_token_credit(card, payable)
-        transaction = self._pagseguro_prepare_payment_transaction_data(
-            payable, token
-        )
+        token = self._get_token_credit(card, payable, payment_mode)
+
+        transaction = self._create_transaction(payable, token, payment_mode)
+
+        payable._invader_set_payment_mode(payment_mode)
+
         transaction.pagseguro_s2s_do_transaction()
 
         return {
             "transaction_status": transaction.state,
         }
 
-    def _pagseguro_prepare_payment_transaction_data(self, payable, token):
-        transaction_data = payable._invader_prepare_payment_transaction_data(
-            payable.payment_mode_id
-        )
-        transaction_data["payment_token_id"] = token.id
+    @restapi.method(
+        [(["/confirm-payment-pix"], "POST")],
+        input_param=restapi.CerberusValidator(
+            "_get_schema_confirm_payment_pix"
+        ),
+        output_param=restapi.CerberusValidator(
+            "_get_schema_return_confirm_payment_pix"
+        ),
+    )
+    def confirm_payment_pix(self, target, **params):
+        # Get body params
+        tx_id = params.get("tx_id")
+        payment_mode = self._get_payment_mode(params)
+        payable = self._get_payable(target, params)
 
-        return self.env["payment.transaction"].create(transaction_data)
+        token = self._get_token_pix(payable, tx_id, payment_mode)
 
-    @staticmethod
-    def _get_token_credit(card, payable):
-        acquirer = payable.payment_mode_id.payment_acquirer_id
-        partner = payable.partner_id
+        transaction = self._create_transaction(payable, token, payment_mode)
 
-        data = {
-            "acquirer_id": acquirer.id,
-            "partner_id": partner.id,
-            "cc_holder_name": card.get("name"),
-            "cc_token": card.get("token"),
-            "payment_method": "CREDIT_CARD",
-            "installments": card.get("installments"),
-        }
+        payable._invader_set_payment_mode(payment_mode)
 
-        return acquirer.pagseguro_s2s_form_process(data)
+        try:
+            res = transaction.pagseguro_pix_do_transaction()
+        except (UserError, ValidationError) as e:
+            return {"result": False, "error": str(e)}
 
-    def get_schema_confirm_payment_credit(self):
-        res = self.payment_service._invader_get_target_validator()
-        res.update(
-            {
-                "card": {
-                    "type": "dict",
-                    "required": True,
-                    "schema": {
-                        "name": {"type": "string", "required": True},
-                        "token": {"type": "string", "required": True},
-                        "installments": {
-                            "type": "integer",
-                            "coerce": int,
-                            "required": True,
-                        },
-                    },
-                }
-            }
-        )
         return res
 
-    def _get_schema_return_confirm_payment_credit(self):
-        return {
-            "transaction_status": {"type": "string", "required": True},
-        }
+    @restapi.method(
+        [(["/confirm-payment-boleto"], "POST")],
+        input_param=restapi.CerberusValidator(
+            "_get_schema_confirm_payment_boleto"
+        ),
+        output_param=restapi.CerberusValidator(
+            "_get_schema_return_confirm_payment_boleto"
+        ),
+    )
+    def confirm_payment_boleto(self, target, **params):
+        """ Confirm payment with Boleto.
+
+        Creates a pagseguro charge and change the sale order status to authorized.
+        Returns result True when Pagseguro's charge is created successfully.
+        """
+        payment_mode = self._get_payment_mode(params)
+        payable = self._get_payable(target, params)
+
+        token = self._get_token_boleto(payable, payment_mode)
+
+        transaction = self._create_transaction(payable, token, payment_mode)
+
+        payable._invader_set_payment_mode(payment_mode)
+
+        try:
+            res = transaction.pagseguro_boleto_do_transaction()
+        except Exception as e:
+            return {"res": {"error": str(e)}}
+
+        return {"res": res}
 
     @restapi.method(
         [(["/public-key"], "GET")],
@@ -154,51 +178,24 @@ class PaymentServicePagseguro(AbstractComponent):
                 "error": "Unknown error",
             }
 
-    def _get_schema_public_key(self):
-        """ Get default api key and user email validator """
-        return self.payment_service._invader_get_target_validator()
+    @staticmethod
+    def _get_token_credit(card, payable, payment_mode):
+        acquirer = payment_mode.payment_acquirer_id
+        partner = payable.partner_id
 
-    def _get_schema_return_public_key(self):
-        """
-        Return validator of checkout_url service
-        checkout_url (str): Redirect checkout url
-        """
-        return {
-            "public_key": {"type": "string", "required": True},
-            "success": {"type": "boolean", "required": True},
-            "error": {"type": "string", "required": False},
+        data = {
+            "acquirer_id": acquirer.id,
+            "partner_id": partner.id,
+            "cc_holder_name": card.get("name"),
+            "cc_token": card.get("token"),
+            "payment_method": "CREDIT_CARD",
+            "installments": card.get("installments"),
         }
 
-    @restapi.method(
-        [(["/confirm-payment-pix"], "POST")],
-        input_param=restapi.CerberusValidator(
-            "_get_schema_confirm_payment_pix"
-        ),
-        output_param=restapi.CerberusValidator(
-            "_get_schema_return_confirm_payment_pix"
-        ),
-    )
-    def confirm_payment_pix(self, target, **params):
-        # Get body params
-        tx_id = params.get("tx_id")
+        return acquirer.pagseguro_s2s_form_process(data)
 
-        payable = self._get_payable(target, params)
-
-        token = self._get_token_pix(payable, tx_id)
-
-        transaction = self._pagseguro_prepare_payment_transaction_data(
-            payable, token
-        )
-
-        try:
-            res = transaction.pagseguro_pix_do_transaction()
-        except (UserError, ValidationError) as e:
-            return {"result": False, "error": str(e)}
-
-        return res
-
-    def _get_token_pix(self, payable, tx_id):
-        acquirer = payable.payment_mode_id.payment_acquirer_id
+    def _get_token_pix(self, payable, tx_id, payment_mode):
+        acquirer = payment_mode.payment_acquirer_id
         partner = payable.partner_id
 
         payment_token = (
@@ -217,9 +214,83 @@ class PaymentServicePagseguro(AbstractComponent):
 
         return payment_token
 
+    def _get_token_boleto(self, payable, payment_mode):
+        acquirer = payment_mode.payment_acquirer_id
+        partner = payable.partner_id
+
+        payment_token = (
+            self.env["payment.token"]
+            .sudo()
+            .create(
+                {
+                    "acquirer_ref": partner.id,
+                    "acquirer_id": acquirer.id,
+                    "partner_id": partner.id,
+                    "pagseguro_payment_method": "BOLETO",
+                }
+            )
+        )
+
+        return payment_token
+
+    def get_schema_confirm_payment_credit(self):
+        res = self.payment_service._invader_get_target_validator()
+        res.update(
+            {
+                "payment_mode_id": {
+                    "coerce": int,
+                    "type": "integer",
+                    "required": True,
+                },
+                "card": {
+                    "type": "dict",
+                    "required": True,
+                    "schema": {
+                        "name": {"type": "string", "required": True},
+                        "token": {"type": "string", "required": True},
+                        "installments": {
+                            "type": "integer",
+                            "coerce": int,
+                            "required": True,
+                        },
+                    },
+                },
+            }
+        )
+        return res
+
+    def _get_schema_return_confirm_payment_credit(self):
+        return {
+            "transaction_status": {"type": "string", "required": True},
+        }
+
+    def _get_schema_public_key(self):
+        """ Get default api key and user email validator """
+        return self.payment_service._invader_get_target_validator()
+
+    def _get_schema_return_public_key(self):
+        """
+        Return validator of checkout_url service
+        checkout_url (str): Redirect checkout url
+        """
+        return {
+            "public_key": {"type": "string", "required": True},
+            "success": {"type": "boolean", "required": True},
+            "error": {"type": "string", "required": False},
+        }
+
     def _get_schema_confirm_payment_pix(self):
         res = self.payment_service._invader_get_target_validator()
-        res.update({"tx_id": {"type": "string", "required": True}})
+        res.update(
+            {
+                "payment_mode_id": {
+                    "coerce": int,
+                    "type": "integer",
+                    "required": True,
+                },
+                "tx_id": {"type": "string", "required": True},
+            }
+        )
         return res
 
     def _get_schema_return_confirm_payment_pix(self):
@@ -227,43 +298,6 @@ class PaymentServicePagseguro(AbstractComponent):
             "result": {"type": "boolean", "required": True},
             "location": {"type": "string", "required": False},
             "error": {"type": "string", "required": False},
-        }
-
-    @restapi.method(
-        [(["/search-payment-pix"], "GET")],
-        input_param=restapi.CerberusValidator("_get_schema_search_pix"),
-        output_param=restapi.CerberusValidator(
-            "_get_schema_return_search_pix"
-        ),
-    )
-    def search_payment_pix(self, **params):
-        """Query the payment status of the pix collection"""
-        # Get body params
-        tx_id = params.get("tx_id") + "?"
-        revisao = params.get("revisao")
-
-        r = self.env["payment.transaction"].pagseguro_search_payment_pix(
-            tx_id, revisao
-        )
-        # # cert = acquirer.get_cert()
-        # # auth_token = acquirer.pagseguro_pix_acces_token
-        # base_url = (
-        #     self.env["ir.config_parameter"].sudo().get_param("web.base.url")
-        # )
-        # _logger.error('base URL >>> ' + base_url)
-        # url = 'https://secure.sandbox.api.pagseguro.com'
-        #
-        # header = {
-        #     "Authorization": "Bearer " + auth_token,
-        #     "Content-Type": "application/json",
-        # }
-
-        res = r.json()
-        _logger.info(res)
-        return {
-            "public_key": "ATIVEI",  # res.get("status"),
-            "success": False,
-            "error": "Unknown error",
         }
 
     def _get_schema_search_pix(self):
@@ -284,57 +318,18 @@ class PaymentServicePagseguro(AbstractComponent):
             # "error": {"type": "string", "required": False},
         }
 
-    @restapi.method(
-        [(["/confirm-payment-boleto"], "POST")],
-        input_param=restapi.CerberusValidator(
-            "_get_schema_confirm_payment_boleto"
-        ),
-        output_param=restapi.CerberusValidator(
-            "_get_schema_return_confirm_payment_boleto"
-        ),
-    )
-    def confirm_payment_boleto(self, target, **params):
-        """ Confirm payment with Boleto.
-
-        Creates a pagseguro charge and change the sale order status to authorized.
-        Returns result True when Pagseguro's charge is created successfully.
-        """
-        payable = self._get_payable(target, params)
-
-        token = self._get_token_boleto(payable)
-
-        transaction = self._pagseguro_prepare_payment_transaction_data(
-            payable, token
-        )
-
-        try:
-            res = transaction.pagseguro_boleto_do_transaction()
-        except Exception as e:
-            return {"res": {"error": str(e)}}
-
-        return {"res": res}
-
-    def _get_token_boleto(self, payable):
-        acquirer = payable.payment_mode_id.payment_acquirer_id
-        partner = payable.partner_id
-
-        payment_token = (
-            self.env["payment.token"]
-            .sudo()
-            .create(
-                {
-                    "acquirer_ref": partner.id,
-                    "acquirer_id": acquirer.id,
-                    "partner_id": partner.id,
-                    "pagseguro_payment_method": "BOLETO",
-                }
-            )
-        )
-
-        return payment_token
-
     def _get_schema_confirm_payment_boleto(self):
-        return self.payment_service._invader_get_target_validator()
+        res = self.payment_service._invader_get_target_validator()
+        res.update(
+            {
+                "payment_mode_id": {
+                    "coerce": int,
+                    "type": "integer",
+                    "required": True,
+                }
+            }
+        )
+        return res
 
     @staticmethod
     def _get_schema_return_confirm_payment_boleto():
