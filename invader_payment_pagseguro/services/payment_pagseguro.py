@@ -30,12 +30,11 @@ class PaymentServicePagseguro(AbstractComponent):
             target, **params
         )
 
-    def _get_payment_mode(self, params):
+    def _get_payment_mode(self):
         """ Returns payment mode from id.
          Checks if payment mode has Pagseguro acquirer.
          """
-        payment_mode_id = params.get("payment_mode_id")
-        payment_mode = self.env["account.payment.mode"].browse(payment_mode_id)
+        payment_mode = self.env.ref("payment_pagseguro.payment_mode_pagseguro")
         self.payment_service._check_provider(payment_mode, "pagseguro")
 
         return payment_mode
@@ -61,7 +60,7 @@ class PaymentServicePagseguro(AbstractComponent):
     def confirm_payment_credit(self, target, **params):
         """ Create charge from payable sale order"""
         card = params.get("card")
-        payment_mode = self._get_payment_mode(params)
+        payment_mode = self._get_payment_mode()
         payable = self._get_payable(target, params)
 
         token = self._get_token_credit(card, payable, payment_mode)
@@ -88,7 +87,7 @@ class PaymentServicePagseguro(AbstractComponent):
     def confirm_payment_pix(self, target, **params):
         # Get body params
         tx_id = params.get("tx_id")
-        payment_mode = self._get_payment_mode(params)
+        payment_mode = self._get_payment_mode()
         payable = self._get_payable(target, params)
 
         token = self._get_token_pix(payable, tx_id, payment_mode)
@@ -119,7 +118,7 @@ class PaymentServicePagseguro(AbstractComponent):
         Creates a pagseguro charge and change the sale order status to authorized.
         Returns result True when Pagseguro's charge is created successfully.
         """
-        payment_mode = self._get_payment_mode(params)
+        payment_mode = self._get_payment_mode()
         payable = self._get_payable(target, params)
 
         token = self._get_token_boleto(payable, payment_mode)
@@ -237,11 +236,6 @@ class PaymentServicePagseguro(AbstractComponent):
         res = self.payment_service._invader_get_target_validator()
         res.update(
             {
-                "payment_mode_id": {
-                    "coerce": int,
-                    "type": "integer",
-                    "required": True,
-                },
                 "card": {
                     "type": "dict",
                     "required": True,
@@ -281,16 +275,7 @@ class PaymentServicePagseguro(AbstractComponent):
 
     def _get_schema_confirm_payment_pix(self):
         res = self.payment_service._invader_get_target_validator()
-        res.update(
-            {
-                "payment_mode_id": {
-                    "coerce": int,
-                    "type": "integer",
-                    "required": True,
-                },
-                "tx_id": {"type": "string", "required": True},
-            }
-        )
+        res.update({"tx_id": {"type": "string", "required": True}})
         return res
 
     def _get_schema_return_confirm_payment_pix(self):
@@ -300,36 +285,8 @@ class PaymentServicePagseguro(AbstractComponent):
             "error": {"type": "string", "required": False},
         }
 
-    def _get_schema_search_pix(self):
-        """ Get default api key and user email validator """
-        return {
-            "tx_id": {"type": "string", "required": True},
-            "revisao": {"type": "string", "required": True},
-        }
-
-    def _get_schema_return_search_pix(self):
-        """
-        Return validator of checkout_url service
-        checkout_url (str): Redirect checkout url
-        """
-        return {
-            "status": {"type": "string", "required": True},
-            # "success": {"type": "boolean", "required": True},
-            # "error": {"type": "string", "required": False},
-        }
-
     def _get_schema_confirm_payment_boleto(self):
-        res = self.payment_service._invader_get_target_validator()
-        res.update(
-            {
-                "payment_mode_id": {
-                    "coerce": int,
-                    "type": "integer",
-                    "required": True,
-                }
-            }
-        )
-        return res
+        return self.payment_service._invader_get_target_validator()
 
     @staticmethod
     def _get_schema_return_confirm_payment_boleto():
