@@ -185,8 +185,9 @@ class PaymentServicePagseguro(AbstractComponent):
         data = {
             "acquirer_id": acquirer.id,
             "partner_id": partner.id,
-            "cc_holder_name": card.get("name"),
-            "cc_token": card.get("token"),
+            "card_holder_name": card.get("name"),
+            "card_brand": card.get("brand"),
+            "card_token": card.get("token"),
             "payment_method": "CREDIT_CARD",
             "installments": card.get("installments"),
         }
@@ -241,6 +242,7 @@ class PaymentServicePagseguro(AbstractComponent):
                     "required": True,
                     "schema": {
                         "name": {"type": "string", "required": True},
+                        "brand": {"type": "string", "required": True},
                         "token": {"type": "string", "required": True},
                         "installments": {
                             "type": "integer",
