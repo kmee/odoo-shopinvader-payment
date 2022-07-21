@@ -242,7 +242,7 @@ class PaymentServicePagseguro(AbstractComponent):
                     "required": True,
                     "schema": {
                         "name": {"type": "string", "required": True},
-                        "brand": {"type": "string", "required": True},
+                        "brand": {"type": "string", "required": False},
                         "token": {"type": "string", "required": True},
                         "installments": {
                             "type": "integer",
