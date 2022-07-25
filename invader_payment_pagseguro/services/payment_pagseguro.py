@@ -51,12 +51,11 @@ class PaymentServicePagseguro(AbstractComponent):
     @restapi.method(
         [(["/confirm-payment-credit"], "POST")],
         input_param=restapi.CerberusValidator(
-            "get_schema_confirm_payment_credit"
+            "_get_schema_confirm_payment_credit"
         ),
         output_param=restapi.CerberusValidator(
             "_get_schema_return_confirm_payment_credit"
         ),
-        cors='*'
     )
     def confirm_payment_credit(self, target, **params):
         """ Create charge from payable sale order"""
@@ -84,7 +83,6 @@ class PaymentServicePagseguro(AbstractComponent):
         output_param=restapi.CerberusValidator(
             "_get_schema_return_confirm_payment_pix"
         ),
-        cors='*'
     )
     def confirm_payment_pix(self, target, **params):
         # Get body params
@@ -113,7 +111,6 @@ class PaymentServicePagseguro(AbstractComponent):
         output_param=restapi.CerberusValidator(
             "_get_schema_return_confirm_payment_boleto"
         ),
-        cors='*'
     )
     def confirm_payment_boleto(self, target, **params):
         """ Confirm payment with Boleto.
@@ -236,7 +233,7 @@ class PaymentServicePagseguro(AbstractComponent):
 
         return payment_token
 
-    def get_schema_confirm_payment_credit(self):
+    def _get_schema_confirm_payment_credit(self):
         res = self.payment_service._invader_get_target_validator()
         res.update(
             {
