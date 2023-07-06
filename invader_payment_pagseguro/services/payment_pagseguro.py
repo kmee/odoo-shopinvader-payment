@@ -206,6 +206,7 @@ class PaymentServicePagseguro(AbstractComponent):
             .sudo()
             .create(
                 {
+                    "name": payable.name + '/' + partner.name + '(' + "PIX" + ')',
                     "acquirer_ref": partner.id,
                     "acquirer_id": acquirer.id,
                     "partner_id": partner.id,
