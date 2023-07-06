@@ -1,6 +1,10 @@
 #  Copyright 2022 KMEE
 #  License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+
+import logging
+_logger = logging.getLogger(__name__)
+
 from odoo.exceptions import UserError, ValidationError
 
 from odoo.addons.base_rest import restapi
@@ -66,31 +70,31 @@ class PaymentServicePagseguro(AbstractComponent):
 
         except (UserError, ValidationError) as e:
             return {"result": False, "error": str(e)}
-      
+        res._set_transaction_authorized()
         return {
             "calendario": {
                 "criacao": str(res.bacenpix_creation),
-                "expiracao": res.bacenpix_expiration,
+                "expiracao": res.bacenpix_expiration or "",
             },
-            "location": res.bacenpix_location,
-            "textoImagemQRcode": res.bacenpix_text_image_qr_code,
-            "txid": res.bacenpix_txid,
-            "chave": res.bacenpix_pix_key,
+            "location": res.bacenpix_location or "",
+            "textoImagemQRcode": res.bacenpix_text_image_qr_code or "",
+            "txid": res.bacenpix_txid or "",
+            "chave": res.bacenpix_pix_key or "",
         }
 
     def _get_schema_return_confirm_payment_pix(self):
         return {
             "calendario": {
-                "type": "dict", "required": True,
+                "type": "dict", "required": False,
                 "schema": {
-                    "criacao": {"type": "string", "required": True},
-                    "expiracao": {"type": "string", "required": True},
+                    "criacao": {"type": "string", "required": False, "nullable": True},
+                    "expiracao": {"type": "string", "required": False, "nullable": True},
                 }
             },
-            "location": {"type": "string", "required": True},
-            "textoImagemQRcode": {"type": "string", "required": True},
-            "txid": {"type": "string", "required": True},
-            "chave": {"type": "string", "required": True},
+            "location": {"type": "string", "required": False, "nullable": True},
+            "textoImagemQRcode": {"type": "string", "required": False, "nullable": True},
+            "txid": {"type": "string", "required": False, "nullable": True},
+            "chave": {"type": "string", "required": False, "nullable": True},
             "result": {"type": "boolean", "required": False},
             "error": {"type": "string", "required": False},
         }
