@@ -69,7 +69,7 @@ class PaymentServicePagseguro(AbstractComponent):
             payable._invader_set_payment_mode(payment_mode)
 
         except (UserError, ValidationError) as e:
-            return {"result": False, "error": str(e)}
+            raise UserError(str(e))
         res._set_transaction_authorized()
         return {
             "calendario": {
