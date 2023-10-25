@@ -42,8 +42,11 @@ class SaleOrderPaymentTransactionEventListener(Component):
         if not shopinvader_backend:
             return
 #        sale_order.action_confirm_cart()
-        response = shopinvader_response.get()
 #        response.set_session("cart_id", 0)
+        try:
+            response = shopinvader_response.get()
+        except:
+            return
 #        response.set_store_cache("cart", {})
         # TODO we should not have to return the last_sale information into the
         # response, only the id...
