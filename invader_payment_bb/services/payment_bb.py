@@ -44,6 +44,7 @@ class PaymentServicePagseguro(AbstractComponent):
         transaction_data["payment_token_id"] = token.id
         transaction_data["reference"] = payable.name
         transaction_data["tx_id"] = tx_id
+        transaction_data["payment_method"] = "PIX"
 
         return self.env["payment.transaction"].create(transaction_data)
 
