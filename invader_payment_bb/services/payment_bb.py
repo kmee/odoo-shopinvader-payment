@@ -4,6 +4,7 @@
 
 import logging
 _logger = logging.getLogger(__name__)
+import hashlib
 
 from odoo.exceptions import UserError, ValidationError
 
@@ -62,6 +63,8 @@ class PaymentServicePagseguro(AbstractComponent):
         payment_mode = self._get_payment_mode()
         payable = self._get_payable(target, params)
         tx_id = params.get('tx_id')
+        if not 26 <= len(tx_id) <= 35:
+            tx_id = hashlib.md5(tx_id.encode()).hexdigest()
 
         token = self._get_token_pix(payable, payment_mode)
 
@@ -114,10 +117,12 @@ class PaymentServicePagseguro(AbstractComponent):
             .sudo()
             .create(
                 {
+                    "name": "PIX/" + partner.name,
                     "acquirer_ref": partner.id,
                     "acquirer_id": acquirer.id,
                     "partner_id": partner.id,
                     "bb_payment_method": "PIX",
+                    "payment_method": "PIX",
                 }
             )
         )
