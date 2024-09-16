@@ -14,8 +14,11 @@ class SaleOrderPaymentTransactionEventListener(Component):
         shopinvader_backend = sale_order.shopinvader_backend_id
         if not shopinvader_backend:
             return
+        try:
+            response = shopinvader_response.get()
+        except:
+            return
         sale_order.action_confirm_cart()
-        response = shopinvader_response.get()
         response.set_session("cart_id", 0)
         response.set_store_cache("cart", {})
         # TODO we should not have to return the last_sale information into the
@@ -36,3 +39,27 @@ class SaleOrderPaymentTransactionEventListener(Component):
 
     def on_payment_transaction_authorized(self, sale_order, transaction):
         self._confirm_and_invalidate_session(sale_order)
+
+    def on_payment_transaction_cancel(self, sale_order, transaction):
+        shopinvader_backend = sale_order.shopinvader_backend_id
+        if not shopinvader_backend:
+            return
+        #        sale_order.action_confirm_cart()
+        #        response.set_session("cart_id", 0)
+        try:
+            response = shopinvader_response.get()
+        except:
+            return
+        #        response.set_store_cache("cart", {})
+        # TODO we should not have to return the last_sale information into the
+        # response, only the id...
+        # This code is an awful hack... We should never have to call
+        # a service implementation from here. That should be the responsibility
+        # of the client to request the cart info to store into ist cache once
+        # once the cache is reset
+        collection = _PseudoCollection("shopinvader.backend", self.env)
+        work = self.work.work_on(collection=collection)
+        work.shopinvader_backend = shopinvader_backend
+        res = work.component(usage="cart")._to_json(sale_order)
+        response.set_store_cache("last_sale", res.get("data", {}))
+        # end of awful code ....
