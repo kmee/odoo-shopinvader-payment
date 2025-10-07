@@ -218,6 +218,17 @@ class ShopinvaderApiPaymentRouterHelper(models.AbstractModel):
         """
         Extract the creation of the response to allow to extend it.
         """
+        # Get processing values from Odoo
+        processing_values = tx_sudo._get_processing_values()
+
+        # Handle return_url -> redirect_form_html mapping if needed
+        if "return_url" in processing_values:
+            # Duplicate field as requested - pass both with same value
+            redirect_url = processing_values["return_url"]
+            processing_values["redirect_form_html"] = redirect_url
+            # Remove return_url to avoid Pydantic validation error
+            del processing_values["return_url"]
+
         return TransactionProcessingValues(
-            flow="redirect", **tx_sudo._get_processing_values()
+            flow="redirect", **processing_values
         )
